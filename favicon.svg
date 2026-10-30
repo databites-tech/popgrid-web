@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- popgrid mark: a small block country; the blue region has grown, the apricot one has shrunk -->
+  <rect width="32" height="32" rx="7" fill="#F5EFE3"/>
+  <g fill="#A8A196">
+    <rect x="4" y="4" width="5.25" height="5.25" rx="1.2"/>
+    <rect x="10.25" y="4" width="5.25" height="5.25" rx="1.2"/>
+    <rect x="4" y="10.25" width="5.25" height="5.25" rx="1.2"/>
+    <rect x="22.75" y="10.25" width="5.25" height="5.25" rx="1.2"/>
+    <rect x="22.75" y="16.5" width="5.25" height="5.25" rx="1.2"/>
+    <rect x="10.25" y="22.75" width="5.25" height="5.25" rx="1.2"/>
+    <rect x="22.75" y="22.75" width="5.25" height="5.25" rx="1.2"/>
+  </g>
+  <rect x="10.25" y="10.25" width="11.5" height="11.5" rx="1.6" fill="#2E5A93"/>
+  <rect x="16.5" y="22.75" width="5.25" height="5.25" rx="1.2" fill="#B36F1E"/>
+</svg>
