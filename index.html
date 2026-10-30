@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Explore countries as popgrid block maps. Switch land, population and GDP and watch the blocks move.">
+<title>popgrid explorer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gabarito:wght@400..900&family=Shantell+Sans:wght,INFM@300..800,0..100&display=swap" rel="stylesheet">
+<style>
+/* Layout: masthead, then a 200px rail (size-by switch) beside a 780px card column (map card, country picker, method note). Falling blocks fill the page behind. */
+:root {
+  --page: #F5EFE3; --card: #EBE3D4; --raised: #FFFFFF; --rule: #DFD5C3; --grid: #DAD0BF;
+  --ink: #1F2433; --ink-2: #4B5060; --muted: #5E6170;
+  --blue: #2E5A93; --apricot: #B36F1E;
+  --context: #A8A196; --context-light: #CFC5B3;
+  --n0: #CBC1AE; --n1: #B7AE9C; --n2: #A49B8B; --n3: #908879;
+  --font: 'Gabarito', ui-sans-serif, system-ui, sans-serif;
+  --hand: 'Shantell Sans', 'Gabarito', cursive;
+  --r-mark: 3px; --r-chip: 6px; --r-tip: 8px; --r-card: 18px;
+  color-scheme: light;
+}
+html { background: var(--page); }
+[hidden] { display: none !important; }
+body { margin: 0; }
+body { background: var(--page); color: var(--ink); font-family: var(--font); font-size: 18px; line-height: 1.45; }
+#bg { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+.wrap { position: relative; z-index: 1; max-width: 1012px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 56px; }
+.mast { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding-bottom: 28px; }
+.mast .title { font-weight: 800; font-size: 22px; letter-spacing: -0.01em; }
+.mast .by { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.mast a { color: inherit; text-decoration: none; }
+.mast a:hover { text-decoration: underline; }
+.layout { display: grid; grid-template-columns: 200px minmax(0, 780px); gap: 32px; justify-content: center; }
+.rail { display: flex; flex-direction: column; gap: 14px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 20px); align-self: start; }
+.rail h2 { font-size: 13px; font-weight: 600; color: var(--ink-2); margin: 0; }
+.vars { display: flex; flex-direction: column; gap: 6px; }
+.var { font: inherit; font-size: 16px; font-weight: 600; text-align: left; color: var(--ink); background: transparent;
+  border: 0; border-radius: var(--r-chip); padding: 8px 10px; cursor: pointer; transition: background 150ms; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.var:hover { background: var(--card); }
+.var[aria-pressed="true"] { background: var(--ink); color: var(--page); }
+.var:disabled { color: var(--context); cursor: default; background: transparent; }
+.var small { font-size: 12px; font-weight: 500; }
+.var:focus-visible, .ctry:focus-visible, summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.rail p { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.5; }
+.col { display: flex; flex-direction: column; gap: 28px; min-width: 0; }
+.card { background: var(--card); border-radius: var(--r-card); padding: 26px 26px 18px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.card h1 { font-size: 28px; font-weight: 800; line-height: 1.18; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+.dek { font-size: 17px; color: var(--ink-2); margin: 0; }
+.mapbox { position: relative; width: 100%; margin-top: 8px; }
+#map { display: block; width: 100%; height: 100%; touch-action: pan-y; }
+.foot { display: flex; justify-content: space-between; gap: 16px; font-size: 12px; color: var(--muted); padding-top: 6px; }
+.tip { position: absolute; pointer-events: none; background: var(--raised); border-radius: var(--r-tip); padding: 10px 12px;
+  font-size: 13px; line-height: 1.4; color: var(--ink); min-width: 170px; max-width: 240px; opacity: 0; transition: opacity 150ms; z-index: 3; }
+.tip b { display: block; font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+.tip .row { display: flex; justify-content: space-between; gap: 12px; color: var(--ink-2); }
+.tip .row span:last-child { color: var(--ink); font-weight: 600; }
+.pick h2 { font-size: 13px; font-weight: 600; color: var(--ink-2); margin: 0 0 10px; }
+.countries { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 10px; }
+.ctry { font: inherit; background: var(--card); border: 0; border-radius: 10px; padding: 10px 8px 9px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--ink-2); transition: background 150ms, transform 150ms; }
+.ctry:hover { background: var(--rule); }
+.ctry canvas { width: 76px; height: 60px; display: block; }
+.ctry span { font-size: 13px; font-weight: 600; }
+.ctry[aria-pressed="true"] { background: var(--raised); color: var(--ink); }
+details { background: var(--card); border-radius: var(--r-card); padding: 16px 22px; }
+summary { cursor: pointer; font-weight: 700; font-size: 16px; }
+details p { font-size: 16px; color: var(--ink-2); margin: 12px 0 0; max-width: 62ch; }
+details pre { background: var(--page); border-radius: var(--r-chip); padding: 12px 14px; overflow-x: auto; font-size: 14px; margin: 12px 0 0; color: var(--ink); }
+details a { color: var(--blue); }
+.mast .title { color: var(--ink); text-decoration: none; }
+.back { font-size: 14px; font-weight: 600; color: var(--ink-2); text-decoration: none; padding: 0 10px; }
+.back:hover { color: var(--ink); text-decoration: underline; }
+.intro { max-width: 640px; padding-bottom: 28px; display: flex; flex-direction: column; gap: 10px; }
+.intro h1 { font-size: 40px; font-weight: 800; line-height: 1.08; letter-spacing: -0.02em; margin: 0; text-wrap: balance; }
+.intro .dek { font-size: 18px; }
+.atlas { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.tile { font: inherit; text-align: left; background: var(--card); border: 0; border-radius: 14px; padding: 14px 14px 12px; cursor: pointer;
+  display: flex; flex-direction: column; gap: 8px; color: var(--ink); transition: background 150ms; min-width: 0; }
+.tile canvas { width: 100%; aspect-ratio: 4 / 3; display: block; }
+.tile .nm { font-size: 16px; font-weight: 700; }
+.tile .sub { font-size: 13px; color: var(--muted); min-height: 1.3em; }
+.tile.live .sub { color: var(--blue); font-weight: 600; }
+.tile:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.atlas-foot { font-size: 12px; color: var(--muted); padding-top: 18px; }
+@media (max-width: 760px) {
+  .intro h1 { font-size: 30px; }
+  .intro .dek { font-size: 16px; }
+  .atlas { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .tile { padding: 10px 10px 9px; }
+  .tile .nm { font-size: 14px; }
+  .tile .sub { font-size: 12px; }
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .rail { position: static; }
+  .vars { flex-direction: row; flex-wrap: wrap; }
+  .rail p { display: none; }
+  .card { padding: 18px 16px 14px; }
+  .card h1 { font-size: 23px; }
+  .dek { font-size: 15px; }
+  .countries { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+  .ctry canvas { width: 64px; height: 50px; }
+}
+@media (prefers-reduced-motion: reduce) { .var, .ctry, .tip { transition: none; } }
+</style>
+</head>
+<body>
+
+<canvas id="bg" aria-hidden="true"></canvas>
+<div class="wrap">
+  <header class="mast">
+    <a class="title" href="#countries">popgrid</a>
+    <span class="by"><a href="https://databites.tech" target="_blank" rel="noopener">by Josep Ferrer</a></span>
+  </header>
+  <section id="landing" hidden>
+    <div class="intro">
+      <h1>Every country here is cut into about 1,000 equal blocks.</h1>
+      <p class="dek" id="intro-dek">Hover a country and its blocks regroup by land, by people and by money. Click one to explore it region by region.</p>
+    </div>
+    <div class="atlas" id="atlas"></div>
+    <p class="atlas-foot">Source: Natural Earth admin-1 boundaries; national statistics offices; Kummu et al. gridded GDP PPP. Built with popgrid.</p>
+  </section>
+  <div class="layout" id="explorer" hidden>
+    <aside class="rail">
+      <a class="back" href="#countries">All countries</a>
+      <h2>Size every block by</h2>
+      <div class="vars" id="vars" role="group" aria-label="Variable"></div>
+      <p>Each map has about 1,000 equal blocks. Switch the variable and every region takes the share it owns.</p>
+    </aside>
+    <main class="col">
+      <section class="card" aria-live="polite">
+        <h1 id="headline">Loading</h1>
+        <p class="dek" id="dek"></p>
+        <div class="mapbox" id="mapbox">
+          <canvas id="map" role="img" aria-label="Block map"></canvas>
+          <div class="tip" id="tip"></div>
+        </div>
+        <div class="foot"><span id="source"></span></div>
+      </section>
+      <section class="pick">
+        <h2>Pick a country</h2>
+        <div class="countries" id="countries"></div>
+      </section>
+      <details>
+        <summary>How this was made</summary>
+        <p>Every map is built with <a href="https://github.com/databites-tech/popgrid" target="_blank" rel="noopener">popgrid</a>, an open source Python package. Land maps rasterise each region's real territory into equal blocks. Population maps deform the regions with a contiguous cartogram so each one ends up with exactly its share of blocks, while keeping real borders and separate islands apart.</p>
+        <p>Boundaries come from Natural Earth admin-1. Population comes from national statistics offices. GDP (PPP, 2024) comes from the Kummu et al. gridded GDP dataset; where a country reports no regional GDP, its regional split is a model estimate and the map says so. Colours are fixed per region, so you can follow one region as it grows or shrinks.</p>
+        <pre id="code"></pre>
+      </details>
+    </main>
+  </div>
+</div>
+
+<script src="data/popgrid-data.js"></script>
+<script>
+const DATA = window.POPGRID_DATA;
+if (!DATA) {
+  document.getElementById('headline').textContent = 'No map data yet.';
+  document.getElementById('dek').textContent = 'Run python scripts/build_data.py to create data/popgrid-data.js, then reload.';
+  throw new Error('data/popgrid-data.js is missing');
+}
+const NAMES = {ARG:'Argentina',AUS:'Australia',BEL:'Belgium',BRA:'Brazil',CAN:'Canada',CHE:'Switzerland',CHN:'China',DEU:'Germany',ESP:'Spain',FRA:'France',GBR:'United Kingdom',ITA:'Italy',JPN:'Japan',KOR:'South Korea',MEX:'Mexico',NLD:'Netherlands',NOR:'Norway',PHL:'Philippines',POL:'Poland',PRT:'Portugal',SWE:'Sweden',TUR:'Turkey',USA:'United States',ZAF:'South Africa'};
+const VARS = [
+  {key:'land', label:'Land', noun:'land'},
+  {key:'population', label:'Population', noun:'people'},
+  {key:'gdp', label:'GDP', noun:'economy'},
+];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const T = {};
+['page','card','rule','grid','ink','ink-2','blue','apricot','context','context-light','n0','n1','n2','n3'].forEach(k => T[k] = css('--' + k));
+const NEUTRAL = [T.n0, T.n1, T.n2, T.n3];
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const pct = v => v > 0 && v < 0.05 ? 'under 0.1%' : v >= 10 ? Math.round(v) + '%' : (Math.round(v * 10) / 10).toLocaleString('en') + '%';
+const fmtN = v => v >= 1e12 ? (v / 1e12).toFixed(1).replace(/\.0$/, '') + ' trillion' : v >= 1e9 ? (v / 1e9).toFixed(1).replace(/\.0$/, '') + ' billion' : v >= 1e6 ? (v / 1e6).toFixed(1).replace(/\.0$/, '') + ' million' : Math.round(v).toLocaleString('en');
+const hexRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const mix = (a, b, t) => 'rgb(' + a.map((v, i) => Math.round(v + (b[i] - v) * t)).join(',') + ')';
+
+/* ---------- country prep ---------- */
+const ISOS = Object.keys(DATA).sort((a, b) => a === 'ESP' ? -1 : b === 'ESP' ? 1 : NAMES[a].localeCompare(NAMES[b]));
+function prep(iso) {
+  const d = DATA[iso];
+  if (d._p) return d._p;
+  const R = d.regions, sum = k => R.reduce((s, r) => s + (r[k] || 0), 0);
+  const L = sum('land'), P = sum('pop'), G = sum('gdp');
+  R.forEach(r => { r.ls = 100 * r.land / L; r.ps = 100 * r.pop / P; r.gs = G ? 100 * (r.gdp || 0) / G : 0; });
+  let gi = 0, li = 0;
+  R.forEach((r, i) => { if (r.ps - r.ls > R[gi].ps - R[gi].ls) gi = i; if (r.ps - r.ls < R[li].ps - R[li].ls) li = i; });
+  const lay = {};
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (const k in d.layouts) {
+    const f = d.layouts[k], b = [];
+    for (let i = 0; i < f.length; i += 3) {
+      const x = f[i] / 10, y = f[i + 1] / 10;
+      b.push({x, y, r: f[i + 2]});
+      x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+    }
+    lay[k] = b;
+  }
+  // centre each layout on its own box inside the shared frame
+  for (const k in lay) {
+    const b = lay[k];
+    let a0 = 1e9, a1 = -1e9, c0 = 1e9, c1 = -1e9;
+    b.forEach(p => { a0 = Math.min(a0, p.x); a1 = Math.max(a1, p.x); c0 = Math.min(c0, p.y); c1 = Math.max(c1, p.y); });
+    const dx = (x0 + x1) / 2 - (a0 + a1) / 2, dy = (y0 + y1) / 2 - (c0 + c1) / 2;
+    b.forEach(p => { p.x += dx; p.y += dy; });
+  }
+  d._p = {R, L, P, G, gi, li, lay, box: [x0 - 0.5, y0 - 0.5, x1 + 0.5, y1 + 0.5]};
+  return d._p;
+}
+function regionColor(p, ri) {
+  if (ri === p.gi) return T.blue;
+  if (ri === p.li) return T.apricot;
+  return NEUTRAL[p.R[ri].c ?? 0];
+}
+
+/* ---------- Hilbert order for smooth matching ---------- */
+function hilbert(x, y, n = 128) {
+  let d = 0;
+  for (let s = n / 2; s > 0; s = Math.floor(s / 2)) {
+    const rx = (x & s) > 0 ? 1 : 0, ry = (y & s) > 0 ? 1 : 0;
+    d += s * s * ((3 * rx) ^ ry);
+    if (ry === 0) { if (rx === 1) { x = s - 1 - x; y = s - 1 - y; } const t = x; x = y; y = t; }
+  }
+  return d;
+}
+function order(blocks, box) {
+  const w = Math.max(box[2] - box[0], box[3] - box[1]) || 1;
+  return blocks.map(b => ({b, h: hilbert(Math.min(127, Math.floor((b.x - box[0]) / w * 127)), Math.min(127, Math.floor((b.y - box[1]) / w * 127)))}))
+    .sort((a, c) => a.h - c.h).map(o => o.b);
+}
+function pairUp(src, dst) {
+  const n = Math.max(src.length, dst.length), out = [];
+  for (let k = 0; k < n; k++) out.push([src[Math.floor(k * src.length / n)], dst[Math.floor(k * dst.length / n)]]);
+  return out;
+}
+
+/* ---------- main map ---------- */
+const map = document.getElementById('map'), box = document.getElementById('mapbox'), ctx = map.getContext('2d');
+const tip = document.getElementById('tip');
+let W = 0, H = 0, DPR = 1;
+const state = {iso: 'ESP', v: 'population', hover: -1};
+let sprites = [];   // {x0,y0,x1,y1,c0,c1,delay,r}
+let anim = null;    // {t0, dur}
+let view = null;    // {s, ox, oy} current fitted transform, per country
+
+function fit(p) {
+  const [x0, y0, x1, y1] = p.box, pad = W < 500 ? 10 : 28;
+  const s = Math.min((W - pad * 2) / (x1 - x0), (H - pad * 2) / (y1 - y0));
+  return {s, ox: (W - (x1 - x0) * s) / 2 - x0 * s, oy: (H - (y1 - y0) * s) / 2 - y0 * s};
+}
+function screen(b, v) { return {x: b.x * v.s + v.ox, y: b.y * v.s + v.oy}; }
+
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = box.clientWidth;
+  H = Math.round(Math.min(W * (W < 500 ? 0.95 : 0.7), window.innerHeight * 0.7, 640));
+  box.style.height = H + 'px';
+  map.width = W * DPR; map.height = H * DPR;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  view = fit(prep(state.iso));
+  settle();
+}
+function settle() {
+  const p = prep(state.iso);
+  sprites = p.lay[state.v].map(b => {
+    const s = screen(b, view), c = regionColor(p, b.r);
+    return {x0: s.x, y0: s.y, x1: s.x, y1: s.y, c0: c, c1: c, r: b.r, delay: 0, sz0: view.s, sz1: view.s};
+  });
+  anim = null; draw(1);
+}
+
+function go(iso, v) {
+  if (iso === state.iso && v === state.v) return;
+  const oldP = prep(state.iso), oldV = view, oldLay = oldP.lay[state.v];
+  const newP = prep(iso), newV = fit(newP), newLay = newP.lay[v];
+  let pairs = [];
+  if (iso === state.iso) {
+    // same country: match block for block inside each region so colours never change
+    const byR = (lay) => { const m = {}; lay.forEach(b => (m[b.r] = m[b.r] || []).push(b)); return m; };
+    const a = byR(oldLay), b = byR(newLay);
+    for (const r in b) {
+      const src = a[r] && a[r].length ? order(a[r], oldP.box) : [];
+      const dst = order(b[r], newP.box);
+      if (!src.length) { // region had no blocks before: grow out of its nearest neighbour position
+        dst.forEach(d => pairs.push([d, d, true])); continue;
+      }
+      pairs.push(...pairUp(src, dst));
+    }
+    for (const r in a) if (!b[r]) a[r].forEach(s => pairs.push([s, s, false, true]));
+  } else {
+    pairs = pairUp(order(oldLay, oldP.box), order(newLay, newP.box));
+  }
+  const ys = pairs.map(([, d]) => screen(d, newV).y), yMin = Math.min(...ys), yMax = Math.max(...ys);
+  sprites = pairs.map(([s, d, born, dies]) => {
+    const A = screen(s, oldV), B = screen(d, newV);
+    const yn = (B.y - yMin) / ((yMax - yMin) || 1);
+    return {
+      x0: born ? B.x : A.x, y0: born ? B.y : A.y, x1: dies ? A.x : B.x, y1: dies ? A.y : B.y,
+      c0: regionColor(oldP, s.r), c1: regionColor(newP, d.r), r: d.r,
+      sz0: born ? 0 : oldV.s, sz1: dies ? 0 : newV.s,
+      delay: (1 - yn) * 420 + Math.random() * 140,   // lower rows land first, like a stack filling up
+    };
+  });
+  state.iso = iso; state.v = v; view = newV; state.hover = -1; hideTip();
+  sprites.forEach(s => { s.rgb0 = hexRgb(toHex(s.c0)); s.rgb1 = hexRgb(toHex(s.c1)); });
+  if (reduce) { settle(); } else { anim = {t0: performance.now(), dur: 820}; requestAnimationFrame(tick); }
+  updateText(); updateUI();
+  try { history.replaceState(null, '', '#' + iso.toLowerCase() + '-' + v); } catch (e) {}
+  bump(iso === state.iso);
+}
+function toHex(c) { return c.startsWith('#') ? c : '#999999'; }
+const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+function tick(now) {
+  if (!anim) return;
+  const el = now - anim.t0, total = anim.dur + 560;
+  draw(el);
+  if (el < total) requestAnimationFrame(tick); else settle();
+}
+
+function draw(el) {
+  ctx.clearRect(0, 0, W, H);
+  const gap = view.s > 7 ? 1.2 : view.s > 4 ? 0.8 : 0.5;
+  for (const s of sprites) {
+    let t = 1;
+    if (anim) t = ease(Math.max(0, Math.min(1, (el - s.delay) / anim.dur)));
+    const x = s.x0 + (s.x1 - s.x0) * t, y = s.y0 + (s.y1 - s.y0) * t, sz = s.sz0 + (s.sz1 - s.sz0) * t;
+    if (sz < 0.3) continue;
+    ctx.fillStyle = anim ? mix(s.rgb0, s.rgb1, t) : s.c1;
+    const w = Math.max(0.3, sz - gap), rr = Math.min(3, w * 0.22);
+    ctx.globalAlpha = anim || state.hover < 0 || s.r === state.hover ? 1 : 0.42;
+    rrect(x - w / 2, y - w / 2, w, w, rr);
+  }
+  ctx.globalAlpha = 1;
+  if (!anim) drawLabels();
+}
+function rrect(x, y, w, h, r) {
+  if (r < 0.6) { ctx.fillRect(x, y, w, h); return; }
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill();
+}
+
+/* direct label for the apricot region, one handwritten note for the blue one */
+// the most interior block of a region: most same-region blocks within two cells
+function regionCentre(ri) {
+  const own = sprites.filter(s => s.r === ri && s.sz1 > 0);
+  if (!own.length) return null;
+  let best = own[0], bs = -1;
+  const lim = (view.s * 2.2) ** 2;
+  own.forEach(a => {
+    let k = 0; own.forEach(b => { if ((a.x1 - b.x1) ** 2 + (a.y1 - b.y1) ** 2 <= lim) k++; });
+    if (k > bs) { bs = k; best = a; }
+  });
+  return {x: best.x1, y: best.y1, n: own.length};
+}
+function haloText(txt, x, y, font, color, align) {
+  ctx.font = font; ctx.textAlign = align; ctx.textBaseline = 'middle';
+  // keep the label inside the canvas
+  const w = ctx.measureText(txt).width, left = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
+  if (left < 4) x += 4 - left; else if (left + w > W - 4) x -= left + w - (W - 4);
+  ctx.lineWidth = 4; ctx.strokeStyle = T.card; ctx.lineJoin = 'round'; ctx.strokeText(txt, x, y);
+  ctx.fillStyle = color; ctx.fillText(txt, x, y);
+}
+function drawLabels() {
+  const p = prep(state.iso);
+  const lc = regionCentre(p.li);
+  if (lc) {
+    // nudge the name away from the blue region so it never sits on top of it
+    const bc = regionCentre(p.gi) || lc;
+    const away = lc.x < bc.x ? -1 : 1, off = view.s * 0.9;
+    haloText(p.R[p.li].n, lc.x + away * off, lc.y, '600 13px Gabarito, sans-serif', T.ink, away < 0 ? 'right' : 'left');
+  }
+  const gc = regionCentre(p.gi);
+  if (!gc) return;
+  const g = p.R[p.gi];
+  const lines = state.v === 'land'
+    ? [g.n + ' is tiny here:', pct(g.ls) + ' of the land']
+    : state.v === 'gdp'
+      ? [g.n + ' makes', pct(g.gs) + ' of the GDP']
+      : [g.n + ' swells to', pct(g.ps) + ' of the people'];
+  // note goes in the emptiest top corner
+  const fs = W < 500 ? 13 : 15, lh = fs * 1.3;
+  ctx.font = `500 ${fs}px "Shantell Sans", cursive`;
+  const tw = Math.max(...lines.map(l => ctx.measureText(l).width));
+  const corners = [{x: 12, y: 14, a: 'left'}, {x: W - 12, y: 14, a: 'right'}, {x: 12, y: H - 14 - lh * 2, a: 'left'}, {x: W - 12, y: H - 14 - lh * 2, a: 'right'}];
+  let pick = corners[0], bestScore = -1;
+  corners.forEach(c => {
+    const bx0 = c.a === 'left' ? c.x : c.x - tw, bx1 = bx0 + tw, by0 = c.y, by1 = c.y + lh * 2;
+    let hit = 0; sprites.forEach(s => { if (s.sz1 > 0 && s.x1 > bx0 - 6 && s.x1 < bx1 + 6 && s.y1 > by0 - 6 && s.y1 < by1 + 6) hit++; });
+    const dist = Math.hypot((bx0 + bx1) / 2 - gc.x, (by0 + by1) / 2 - gc.y);
+    const score = 1e6 - hit * 1e4 - dist;
+    if (score > bestScore) { bestScore = score; pick = c; }
+  });
+  ctx.fillStyle = T['ink-2']; ctx.textAlign = pick.a; ctx.textBaseline = 'top';
+  lines.forEach((l, i) => ctx.fillText(l, pick.x, pick.y + i * lh));
+  // curved arrow from note to the region's middle block
+  const sx = pick.a === 'left' ? pick.x + Math.min(tw, 80) * 0.5 : pick.x - Math.min(tw, 80) * 0.5;
+  const top = pick.y < H / 2;
+  const sy = top ? pick.y + lh * 2 + 6 : pick.y - 6;
+  const ex = gc.x, ey = gc.y + (top ? -view.s * 0.7 : view.s * 0.7);
+  const mx = (sx + ex) / 2 + (top ? -1 : 1) * (ey - sy) * 0.25, my = (sy + ey) / 2 - (ex - sx) * 0.15;
+  ctx.strokeStyle = T['ink-2']; ctx.lineWidth = 1.4; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(sx, sy); ctx.quadraticCurveTo(mx, my, ex, ey); ctx.stroke();
+  const ang = Math.atan2(ey - my, ex - mx), ah = 7;
+  ctx.beginPath();
+  ctx.moveTo(ex - ah * Math.cos(ang - 0.45), ey - ah * Math.sin(ang - 0.45)); ctx.lineTo(ex, ey);
+  ctx.lineTo(ex - ah * Math.cos(ang + 0.45), ey - ah * Math.sin(ang + 0.45)); ctx.stroke();
+}
+
+/* hover */
+function hit(mx, my) {
+  let best = -1, bd = (view.s * 0.75) ** 2;
+  sprites.forEach(s => { if (s.sz1 <= 0) return; const d = (s.x1 - mx) ** 2 + (s.y1 - my) ** 2; if (d < bd) { bd = d; best = s.r; } });
+  return best;
+}
+function hideTip() { tip.style.opacity = 0; }
+function onMove(e) {
+  if (anim) return;
+  const r = map.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+  const ri = hit(mx, my);
+  if (ri !== state.hover) { state.hover = ri; draw(1); }
+  if (ri < 0) { hideTip(); return; }
+  const p = prep(state.iso), g = p.R[ri];
+  const blocks = sprites.filter(s => s.r === ri && s.sz1 > 0).length;
+  tip.innerHTML = `<b>${g.n}</b>
+    <div class="row"><span>Share of land</span><span>${pct(g.ls)}</span></div>
+    <div class="row"><span>Share of people</span><span>${pct(g.ps)}</span></div>
+    ${p.G ? `<div class="row"><span>Share of GDP</span><span>${pct(g.gs)}</span></div>` : ''}
+    <div class="row"><span>${fmtN(g.land)} km²</span><span>${fmtN(g.pop)} people</span></div>
+    <div class="row"><span>Blocks on this map</span><span>${blocks}</span></div>`;
+  const tx = Math.min(Math.max(mx + 14, 0), W - 250), ty = my + 16 + 120 > H ? my - 130 : my + 16;
+  tip.style.left = Math.max(0, tx) + 'px'; tip.style.top = ty + 'px'; tip.style.opacity = 1;
+}
+map.addEventListener('pointermove', onMove);
+map.addEventListener('pointerleave', () => { state.hover = -1; hideTip(); if (!anim) draw(1); });
+
+/* ---------- text ---------- */
+const THE = new Set(['USA', 'GBR', 'NLD', 'PHL']);
+const full = iso => (THE.has(iso) ? 'the ' : '') + NAMES[iso];
+const poss = iso => full(iso) + (full(iso).endsWith('s') ? '’' : '’s');
+function updateText() {
+  const p = prep(state.iso), name = full(state.iso), g = p.R[p.gi], l = p.R[p.li], d = DATA[state.iso];
+  const h = state.v === 'land'
+    ? `${l.n} covers ${pct(l.ls)} of ${name} but holds ${l.ps < 0.05 ? 'almost none' : 'only ' + pct(l.ps)} of its people.`
+    : state.v === 'gdp'
+      ? `${g.n} is ${pct(g.ls)} of ${poss(state.iso)} land and makes ${pct(g.gs)} of its GDP.`
+      : `${g.n} is ${pct(g.ls)} of ${poss(state.iso)} land and ${pct(g.ps)} of its people.`;
+  document.getElementById('headline').textContent = h;
+  const blocks = p.lay[state.v].length.toLocaleString('en');
+  const modelled = d.gdpQuality === 'modelled' ? ' The regional split is a modelled estimate.' : '';
+  document.getElementById('dek').textContent = state.v === 'land'
+    ? `Every block is 0.1% of ${poss(state.iso)} land, ${fmtN(p.L)} km² in all. Switch variable and watch the regions trade blocks.`
+    : state.v === 'gdp'
+      ? `Every block is 0.1% of ${poss(state.iso)} GDP, $${fmtN(p.G)} in purchasing power parity.${modelled}`
+      : `Every block is 0.1% of ${poss(state.iso)} ${fmtN(p.P)} people. Hover a region to compare its land and its people.`;
+  const src = state.v === 'land' ? '' : '; ' + (state.v === 'gdp' ? 'GDP: ' + d.sources.gdp : 'population: ' + d.sources.population);
+  document.getElementById('source').textContent = 'Source: Natural Earth admin-1 boundaries' + src + '. Built with popgrid.';
+  map.setAttribute('aria-label', h + ' ' + blocks + ' blocks, one per 0.1%.');
+  document.getElementById('code').textContent =
+`pip install popgrid
+
+from popgrid import ${state.v === 'land' ? 'AreaGrid' : 'PopGrid'}
+${state.v === 'land' ? 'AreaGrid' : 'PopGrid'}("${state.iso}"${state.v === 'gdp' ? ', by="gdp"' : ''}).plot().savefig("${NAMES[state.iso].toLowerCase().replace(/ /g, '_')}_${state.v}.png", dpi=170)`;
+}
+function updateUI() {
+  document.querySelectorAll('.var').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === state.v));
+  document.querySelectorAll('.ctry').forEach(b => { const on = b.dataset.iso === state.iso; b.setAttribute('aria-pressed', on); paintThumb(b.querySelector('canvas'), b.dataset.iso, on); });
+}
+
+/* ---------- controls ---------- */
+const varsEl = document.getElementById('vars');
+VARS.forEach(v => {
+  const b = document.createElement('button');
+  b.className = 'var'; b.dataset.v = v.key; b.type = 'button';
+  b.innerHTML = v.label + (v.soon ? ' <small>soon</small>' : '');
+  if (v.soon) b.disabled = true; else b.addEventListener('click', () => go(state.iso, v.key));
+  varsEl.appendChild(b);
+});
+const cEl = document.getElementById('countries');
+function paintThumb(cv, iso, on) {
+  const p = prep(iso), r = Math.min(2, window.devicePixelRatio || 1);
+  const w = cv.clientWidth || 76, h = cv.clientHeight || 60;
+  cv.width = w * r; cv.height = h * r;
+  const c = cv.getContext('2d'); c.setTransform(r, 0, 0, r, 0, 0); c.clearRect(0, 0, w, h);
+  const lay = p.lay.land;
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  lay.forEach(b => { x0 = Math.min(x0, b.x); x1 = Math.max(x1, b.x); y0 = Math.min(y0, b.y); y1 = Math.max(y1, b.y); });
+  const s = Math.min((w - 4) / (x1 - x0 + 1), (h - 4) / (y1 - y0 + 1));
+  const ox = (w - (x1 - x0 + 1) * s) / 2 - (x0 - 0.5) * s, oy = (h - (y1 - y0 + 1) * s) / 2 - (y0 - 0.5) * s;
+  c.fillStyle = on ? T.blue : T.context;
+  const sz = Math.max(0.6, s - (s > 3 ? 0.6 : 0.25));
+  lay.forEach(b => c.fillRect(b.x * s + ox - sz / 2, b.y * s + oy - sz / 2, sz, sz));
+}
+ISOS.forEach(iso => {
+  const b = document.createElement('button');
+  b.className = 'ctry'; b.dataset.iso = iso; b.type = 'button';
+  b.innerHTML = `<canvas aria-hidden="true"></canvas><span>${NAMES[iso]}</span>`;
+  b.addEventListener('click', () => go(iso, state.v));
+  cEl.appendChild(b);
+});
+
+/* ---------- background: loose blocks that slide, gather and scatter ---------- */
+const bg = document.getElementById('bg'), bctx = bg.getContext('2d');
+let BC = 24, cols = 0, rows = 0, occ = null, blocks = [], bgLast = 0, nextMove = 0;
+const bgEase = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+function bgResize() {
+  const r = Math.min(2, window.devicePixelRatio || 1);
+  bg.width = innerWidth * r; bg.height = innerHeight * r; bctx.setTransform(r, 0, 0, r, 0, 0);
+  BC = innerWidth < 600 ? 18 : 24;
+  cols = Math.ceil(innerWidth / BC); rows = Math.ceil(innerHeight / BC);
+  occ = new Uint8Array(cols * rows); blocks = [];
+  const n = Math.round(cols * rows * 0.07);
+  for (let i = 0; i < n; i++) {
+    const c = Math.floor(Math.random() * cols), r2 = Math.floor(Math.random() * rows);
+    if (occ[r2 * cols + c]) continue;
+    occ[r2 * cols + c] = 1;
+    blocks.push({c, r: r2, fc: c, fr: r2, t0: -1e9, tone: Math.random() < 0.8 ? 1 : 2});
+  }
+  bgDraw(performance.now());
+}
+const nbrs = (c, r) => [[c + 1, r], [c - 1, r], [c, r + 1], [c, r - 1]].filter(([x, y]) => x >= 0 && y >= 0 && x < cols && y < rows);
+const crowd = (c, r) => nbrs(c, r).reduce((k, [x, y]) => k + occ[y * cols + x], 0);
+function moveOne(now) {
+  const b = blocks[Math.floor(Math.random() * blocks.length)];
+  if (!b || now - b.t0 < 800) return;
+  const free = nbrs(b.c, b.r).filter(([x, y]) => !occ[y * cols + x]);
+  if (!free.length) return;
+  // a slow tide: for a while blocks drift towards neighbours, then away from them
+  const gather = Math.sin(now / 9000) > 0;
+  occ[b.r * cols + b.c] = 0;
+  free.sort((a, z) => gather ? crowd(z[0], z[1]) - crowd(a[0], a[1]) : crowd(a[0], a[1]) - crowd(z[0], z[1]));
+  const [nc, nr] = Math.random() < 0.75 ? free[0] : free[Math.floor(Math.random() * free.length)];
+  b.fc = b.c; b.fr = b.r; b.c = nc; b.r = nr; b.t0 = now;
+  occ[nr * cols + nc] = 1;
+}
+function bgStep(now) {
+  if (!document.hidden) {
+    if (now > nextMove) { const k = Math.max(1, Math.round(blocks.length / 60)); for (let i = 0; i < k; i++) moveOne(now); nextMove = now + 70; }
+    bgDraw(now);
+  }
+  requestAnimationFrame(bgStep);
+}
+function bgDraw(now) {
+  bctx.clearRect(0, 0, innerWidth, innerHeight);
+  const g = 3, tones = [null, T.rule, T.grid];
+  for (const b of blocks) {
+    const t = bgEase(Math.min(1, Math.max(0, (now - b.t0) / 700)));
+    const x = (b.fc + (b.c - b.fc) * t) * BC, y = (b.fr + (b.r - b.fr) * t) * BC;
+    bctx.fillStyle = tones[b.tone];
+    bctx.beginPath(); bctx.roundRect(x + g / 2, y + g / 2, BC - g, BC - g, 3); bctx.fill();
+  }
+}
+// a switch nudges a handful of background blocks, so the page answers the click
+function bump() { if (reduce) return; const now = performance.now(); for (let i = 0; i < 40; i++) moveOne(now); }
+
+/* ---------- landing: every country as a tile that regroups on hover ---------- */
+const atlasEl = document.getElementById('atlas');
+const CYCLE = ['population', 'gdp', 'land'];
+const LABEL = {land: 'Sized by land', population: 'Sized by population', gdp: 'Sized by GDP'};
+const tiles = [];
+let tileRAF = 0;
+function tileFit(p, w, h) {
+  const [x0, y0, x1, y1] = p.box, pad = 4;
+  const sc = Math.min((w - pad * 2) / (x1 - x0), (h - pad * 2) / (y1 - y0));
+  return {s: sc, ox: (w - (x1 - x0) * sc) / 2 - x0 * sc, oy: (h - (y1 - y0) * sc) / 2 - y0 * sc};
+}
+function tileColor(p, r, colored) { return colored ? regionColor(p, r) : T.context; }
+function tileSizeAndSettle(t) {
+  const r = Math.min(2, window.devicePixelRatio || 1);
+  t.w = t.cv.clientWidth; t.h = t.cv.clientHeight;
+  if (!t.w) return;
+  t.cv.width = t.w * r; t.cv.height = t.h * r; t.ctx.setTransform(r, 0, 0, r, 0, 0);
+  t.fit = tileFit(t.p, t.w, t.h);
+  t.sprites = t.p.lay[t.v].map(b => {
+    const x = b.x * t.fit.s + t.fit.ox, y = b.y * t.fit.s + t.fit.oy, c = hexRgb(tileColor(t.p, b.r, t.colored));
+    return {x0: x, y0: y, x1: x, y1: y, c0: c, c1: c, d: 0};
+  });
+  t.anim = null; tileDraw(t, 0);
+}
+function tileMorph(t, toV, colored) {
+  const p = t.p, f = t.fit, from = t.v, wasColored = t.colored;
+  const byR = lay => { const m = {}; lay.forEach(b => (m[b.r] = m[b.r] || []).push(b)); return m; };
+  const a = byR(p.lay[from]), b = byR(p.lay[toV]), pairs = [];
+  for (const r in b) {
+    const dst = order(b[r], p.box), src = a[r] && a[r].length ? order(a[r], p.box) : dst;
+    pairs.push(...pairUp(src, dst));
+  }
+  t.sprites = pairs.map(([s0, d]) => {
+    const yn = (d.y - p.box[1]) / ((p.box[3] - p.box[1]) || 1);
+    return {
+      x0: s0.x * f.s + f.ox, y0: s0.y * f.s + f.oy, x1: d.x * f.s + f.ox, y1: d.y * f.s + f.oy,
+      c0: hexRgb(tileColor(p, s0.r, wasColored)), c1: hexRgb(tileColor(p, d.r, colored)),
+      d: (1 - yn) * 260 + Math.random() * 90,
+    };
+  });
+  t.v = toV; t.colored = colored;
+  t.sub.textContent = colored ? LABEL[toV] : t.rest;
+  t.el.classList.toggle('live', colored);
+  if (reduce) { tileSizeAndSettle(t); return; }
+  t.anim = {t0: performance.now(), dur: 620};
+  if (!tileRAF) tileRAF = requestAnimationFrame(tileTick);
+}
+function tileTick(now) {
+  tileRAF = 0;
+  let busy = false;
+  for (const t of tiles) {
+    if (!t.anim) continue;
+    const el = now - t.anim.t0;
+    tileDraw(t, el);
+    if (el > t.anim.dur + 360) {
+      t.anim = null;
+      if (t.hover) t.timer = setTimeout(() => { if (t.hover) tileMorph(t, CYCLE[(CYCLE.indexOf(t.v) + 1) % 3], true); }, 650);
+    } else busy = true;
+  }
+  if (busy) tileRAF = requestAnimationFrame(tileTick);
+}
+function tileDraw(t, el) {
+  const c = t.ctx, s = t.fit.s, gap = s > 5 ? 0.9 : s > 3 ? 0.6 : 0.35, w = Math.max(0.5, s - gap), rr = s > 5 ? 1.5 : 0;
+  c.clearRect(0, 0, t.w, t.h);
+  for (const sp of t.sprites) {
+    const k = t.anim ? ease(Math.max(0, Math.min(1, (el - sp.d) / t.anim.dur))) : 1;
+    const x = sp.x0 + (sp.x1 - sp.x0) * k, y = sp.y0 + (sp.y1 - sp.y0) * k;
+    c.fillStyle = mix(sp.c0, sp.c1, k);
+    if (rr) { c.beginPath(); c.roundRect(x - w / 2, y - w / 2, w, w, rr); c.fill(); }
+    else c.fillRect(x - w / 2, y - w / 2, w, w);
+  }
+}
+function startTile(t) { if (t.hover) return; t.hover = true; clearTimeout(t.timer); tileMorph(t, 'population', true); }
+function stopTile(t) { if (!t.hover) return; t.hover = false; clearTimeout(t.timer); tileMorph(t, 'land', false); }
+ISOS.forEach(iso => {
+  const p = prep(iso), d = DATA[iso];
+  const el = document.createElement('button');
+  el.className = 'tile'; el.type = 'button';
+  const rest = `${p.R.length} ${d.unit.toLowerCase()}`;
+  el.innerHTML = `<canvas aria-hidden="true"></canvas><span class="nm">${NAMES[iso]}</span><span class="sub">${rest}</span>`;
+  el.setAttribute('aria-label', 'Explore ' + NAMES[iso]);
+  const t = {iso, p, el, cv: el.querySelector('canvas'), sub: el.querySelector('.sub'), rest, v: 'land', colored: false, hover: false};
+  t.ctx = t.cv.getContext('2d');
+  el.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') startTile(t); });
+  el.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') stopTile(t); });
+  el.addEventListener('focus', () => startTile(t));
+  el.addEventListener('blur', () => stopTile(t));
+  el.addEventListener('click', () => { enterFromLanding = true; location.hash = iso.toLowerCase() + '-population'; });
+  atlasEl.appendChild(el); tiles.push(t);
+});
+// without a mouse, tiles take turns playing on their own
+let autoTimer = 0;
+function autoplay() {
+  clearTimeout(autoTimer);
+  if (reduce || matchMedia('(hover: hover)').matches || landing.hidden) return;
+  const vis = tiles.filter(t => { const b = t.el.getBoundingClientRect(); return b.bottom > 0 && b.top < innerHeight && !t.hover; });
+  const t = vis[Math.floor(Math.random() * vis.length)];
+  if (t) { startTile(t); setTimeout(() => stopTile(t), 4200); }
+  autoTimer = setTimeout(autoplay, 2600);
+}
+
+/* ---------- views ---------- */
+const landing = document.getElementById('landing'), explorer = document.getElementById('explorer');
+let enterFromLanding = false;
+function showLanding() {
+  explorer.hidden = true; landing.hidden = false;
+  tiles.forEach(t => { t.hover = false; t.v = 'land'; t.colored = false; t.el.classList.remove('live'); t.sub.textContent = t.rest; tileSizeAndSettle(t); });
+  document.title = 'popgrid explorer';
+  autoplay();
+}
+function showExplorer(iso, v) {
+  if (!explorer.hidden) { go(iso, v); return; }
+  landing.hidden = true; explorer.hidden = false; clearTimeout(autoTimer);
+  try { window.scrollTo(0, 0); } catch (e) {}
+  state.iso = iso; state.v = enterFromLanding ? 'land' : v;
+  updateText(); updateUI(); resize();
+  if (enterFromLanding && !reduce) setTimeout(() => go(iso, v), 380);
+  else if (enterFromLanding) go(iso, v);
+  enterFromLanding = false;
+}
+function route() {
+  const m = (location.hash || '').slice(1).match(/^([a-z]{3})-(land|population|gdp)$/);
+  if (m && DATA[m[1].toUpperCase()]) showExplorer(m[1].toUpperCase(), m[2]);
+  else showLanding();
+}
+
+/* ---------- boot ---------- */
+(function boot() {
+  if (!matchMedia('(hover: hover)').matches) document.getElementById('intro-dek').textContent = 'Watch the tiles regroup by land, by people and by money. Tap a country to explore it region by region.';
+  bgResize(); if (!reduce) requestAnimationFrame(bgStep);
+  route();
+  addEventListener('hashchange', route);
+  addEventListener('resize', () => {
+    bgResize();
+    if (!explorer.hidden) { resize(); updateUI(); } else tiles.forEach(tileSizeAndSettle);
+  });
+  if (document.fonts) document.fonts.load('500 15px "Shantell Sans"').then(() => { if (!anim && !explorer.hidden) draw(1); });
+})();
+</script>
+</body>
+</html>
