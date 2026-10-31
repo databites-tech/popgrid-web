@@ -10,7 +10,7 @@ Open `index.html` in a browser. That's it: the data loads as a script, so it wor
 
 ## Rebuild the data
 
-The layouts come from popgrid 0.7.0 or later (GDP support).
+The layouts come from popgrid 0.7.1 or later.
 
 ```bash
 python -m venv .venv
